@@ -5,6 +5,7 @@ import time
 
 from dotenv import load_dotenv
 from elasticsearch import Elasticsearch
+from sentence_transformers import SentenceTransformer
 
 ### reads & imports variables stored in .env file (environment variables)
 load_dotenv()
@@ -12,26 +13,39 @@ load_dotenv()
 
 class Search:
     def __init__(self):
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')
         self.es = Elasticsearch('http://localhost:9200') 
         client_info = self.es.info()
         print('Connected to Elasticsearch!')
         pprint(client_info.body)
 
-
+    
     def create_index(self):
         """This method create an index automatically
         deleting a previous instance of the index if it exists
         """
-        
-        self.es.indices.delete(index="my_docs", ignore_unavailable=True)
-        self.es.indices.create(index="my_docs")
+        self.es.indices.delete(index='my_docs', ignore_unavailable=True)
+        self.es.indices.create(index='my_docs', mappings={
+            'properties': {
+                'embedding': {
+                    'type': 'dense_vector',
+                }
+            }
+        })
 
+
+    def get_embedding(self, text):
+        return self.model.encode(text)
+    
 
     def insert_document(self, doc):
         """This method inserts the doc into the my_docs index,
         returning the response from the service
         """
-        return self.es.index(index="my_docs", body=doc)
+        return self.es.index(index='my_docs', document={
+            **doc,
+            'embedding': self.get_embedding(doc['summary']),
+        })
 
 
     def insert_documents(self, documents):
@@ -41,7 +55,10 @@ class Search:
         operations = []
         for doc in documents:
             operations.append({"index": {"_index": "my_docs"}})
-            operations.append(doc)
+            operations.append({
+                **doc,
+                'embedding': self.get_embedding(doc['summary']),
+            })
         return self.es.bulk(operations=operations)
     
 

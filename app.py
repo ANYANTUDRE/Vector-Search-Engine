@@ -16,7 +16,7 @@ def handle_search():
     filters, parsed_query = extract_filters(query)
     from_ = request.form.get('from_', type=int, default=0)
 
-    if parsed_query:
+    """if parsed_query:
         search_query = {
             'must': {
                 'multi_match': {
@@ -66,10 +66,24 @@ def handle_search():
             for bucket in results['aggregations']['year-agg']['buckets']
             if bucket['doc_count'] > 0
         },
-    }
+    }"""
+
+    results = es.search(
+        knn={
+            'field': 'embedding',    
+            'query_vector': es.get_embedding(parsed_query),
+            'num_candidates': 50,          ### number of candidate docs to consider from each shard
+            'k': 10,                       ### number of results to return
+        },
+        size=5,
+        from_=from_
+    )
+
     return render_template('index.html', results=results['hits']['hits'],
                            query=query, from_=from_,
-                           total=results['hits']['total']['value'], aggs=aggs)
+                           total=results['hits']['total']['value']
+                           #, aggs=aggs
+                           )
 
 
 @app.get('/document/<id>')
